@@ -9,13 +9,13 @@
           "api_key": "API Key"
         },
         "data_description": {
-          "base_url": "The base URL of the CodingPlan API, e.g., https://codingplan.aliyuncs.com/v1",
-          "api_key": "Your CodingPlan API key"
+          "base_url": "The base URL of the CodingPlan API, e.g., https://coding.dashscope.aliyuncs.com/v1",
+          "api_key": "Your CodingPlan API key (starts with sk-sp-)"
         }
       },
       "model": {
         "title": "Model Configuration",
-        "description": "Select the model and configure generation parameters. Models are fetched automatically from the API.",
+        "description": "Select the model and configure generation parameters.",
         "data": {
           "chat_model": "Model",
           "max_tokens": "Max Tokens",
@@ -23,7 +23,7 @@
           "top_p": "Top P"
         },
         "data_description": {
-          "chat_model": "Select from available models fetched from CodingPlan API",
+          "chat_model": "Select from CodingPlan supported models",
           "max_tokens": "Maximum number of tokens to generate (1-8192)",
           "temperature": "Sampling temperature (0.0-2.0)",
           "top_p": "Nucleus sampling parameter (0.0-1.0)"
@@ -37,6 +37,13 @@
     },
     "abort": {
       "already_configured": "CodingPlan is already configured."
+    }
+  },
+  "entity": {
+    "conversation": {
+      "codingplan_conversation": {
+        "name": "CodingPlan"
+      }
     }
   }
 }

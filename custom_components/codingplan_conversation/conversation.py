@@ -61,7 +61,8 @@ class CodingPlanConversationEntity(conversation.ConversationEntity):
     """CodingPlan conversation agent."""
 
     _attr_has_entity_name = True
-    _attr_name = "CodingPlan"
+    _attr_name = "CodingPlan Conversation"
+    _attr_should_poll = False
 
     def __init__(
         self,
@@ -73,7 +74,8 @@ class CodingPlanConversationEntity(conversation.ConversationEntity):
         self.hass = hass
         self._entry = entry
         self._client = client
-        self._attr_unique_id = entry.entry_id
+        self._attr_unique_id = f"{entry.entry_id}_conversation"
+        self.entity_id = f"conversation.codingplan_{entry.entry_id[:8]}"
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="CodingPlan",
@@ -81,6 +83,7 @@ class CodingPlanConversationEntity(conversation.ConversationEntity):
             model=entry.data.get(CONF_CHAT_MODEL, "CodingPlan"),
             entry_type=dr.DeviceEntryType.SERVICE,
         )
+        _LOGGER.debug("CodingPlan entity initialized: %s", self.entity_id)
 
     @property
     def supported_features(self) -> int:
