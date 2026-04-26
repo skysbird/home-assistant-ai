@@ -210,7 +210,6 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
                 llm_context = llm.LLMContext(
                     platform=DOMAIN,
                     context=user_input.context,
-                    user_prompt=user_input.text,
                     language=user_input.language,
                     assistant="conversation",
                     device_id=user_input.device_id,
