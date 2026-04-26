@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install --no-cache-dir \
+    wyoming==1.5.3 \
+    aiohttp==3.9.5 \
+    soundfile==0.12.1 \
+    numpy==1.26.4
+
+# Copy adapter code
+COPY wyoming_voxcpm.py /app/
+
+# Run the adapter
+CMD ["python", "/app/wyoming_voxcpm.py"]

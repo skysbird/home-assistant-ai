@@ -1,0 +1,54 @@
+# VoxCPM2 TTS 服务 + Wyoming 协议适配器
+# 需要 NVIDIA GPU (CUDA ≥ 12.0)
+
+services:
+  # === VoxCPM2 TTS (OpenAI 兼容 API) ===
+  voxcpm:
+    image: openbmb/voxcpm2:latest
+    container_name: voxcpm-tts
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - voxcpm-models:/models
+      - voxcpm-cache:/cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - MODEL_NAME=openbmb/VoxCPM2
+      - PORT=8000
+    command: >
+      vllm serve openbmb/VoxCPM2 --omni --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # === Wyoming 适配器 (连接 Home Assistant) ===
+  wyoming-voxcpm:
+    build:
+      context: .
+      dockerfile: Dockerfile.wyoming
+    container_name: wyoming-voxcpm
+    restart: unless-stopped
+    ports:
+      - "10200:10200"
+    environment:
+      - VOXCPM_URL=http://voxcpm:8000
+      - VOXCPM_MODEL=openbmb/VoxCPM2
+      - PORT=10200
+    depends_on:
+      voxcpm:
+        condition: service_healthy
+
+volumes:
+  voxcpm-models:
+  voxcpm-cache:

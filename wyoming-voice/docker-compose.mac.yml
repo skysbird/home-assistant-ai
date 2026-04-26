@@ -1,0 +1,47 @@
+# VoxCPM2 TTS 服务 - Mac Apple Silicon 版本
+# 支持 M1/M2/M3/M4 Mac (使用 MPS/Metal 加速)
+
+services:
+  # === VoxCPM2 TTS 服务 ===
+  voxcpm:
+    build:
+      context: .
+      dockerfile: Dockerfile.mac
+    container_name: voxcpm-tts
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - voxcpm-models:/models
+      - voxcpm-cache:/cache
+    environment:
+      - MODEL_NAME=openbmb/VoxCPM2
+      - PORT=8000
+      - DEVICE=mps  # Mac Metal 加速
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s  # Mac 首次启动较慢
+
+  # === Wyoming 适配器 ===
+  wyoming-voxcpm:
+    build:
+      context: .
+      dockerfile: Dockerfile.wyoming
+    container_name: wyoming-voxcpm
+    restart: unless-stopped
+    ports:
+      - "10200:10200"
+    environment:
+      - VOXCPM_URL=http://voxcpm:8000
+      - VOXCPM_MODEL=openbmb/VoxCPM2
+      - PORT=10200
+    depends_on:
+      voxcpm:
+        condition: service_healthy
+
+volumes:
+  voxcpm-models:
+  voxcpm-cache:
