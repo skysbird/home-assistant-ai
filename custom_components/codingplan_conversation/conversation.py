@@ -10,13 +10,14 @@ import openai
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
+from voluptuous_openapi import convert
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LLM_HASS_API, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
-from homeassistant.helpers import intent, llm
+from homeassistant.helpers import device_registry as dr, intent, llm
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import ulid
 
@@ -37,40 +38,74 @@ _LOGGER = logging.getLogger(__name__)
 MAX_TOOL_ITERATIONS = 10
 
 
+def _format_tool(tool: llm.Tool) -> dict[str, Any]:
+    """Format tool specification for OpenAI API."""
+    unsupported_keys = {"oneOf", "anyOf", "allOf", "enum", "not"}
+    schema = convert(tool.parameters)
+    if unsupported_keys.intersection(schema):
+        schema = {k: v for k, v in schema.items() if k not in unsupported_keys}
+
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "parameters": schema,
+            "description": tool.description,
+        },
+    }
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up CodingPlan conversation agent."""
-    _LOGGER.debug("Setting up CodingPlan conversation agent for entry %s", entry.entry_id)
+    """Set up CodingPlan conversation entity."""
+    _LOGGER.debug("Setting up CodingPlan conversation entity for entry %s", entry.entry_id)
 
-    agent = CodingPlanAgent(hass, entry)
-
-    # Register the agent with Home Assistant
-    conversation.async_set_agent(hass, entry, agent)
-
-    _LOGGER.info("CodingPlan conversation agent registered successfully")
+    async_add_entities([CodingPlanConversationEntity(hass, entry)])
 
 
-class CodingPlanAgent(conversation.AbstractConversationAgent):
-    """CodingPlan conversation agent."""
+class CodingPlanConversationEntity(conversation.ConversationEntity, conversation.AbstractConversationAgent):
+    """CodingPlan conversation agent entity."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the agent."""
         self.hass = hass
-        self.entry = entry
-        self.client: AsyncOpenAI = entry.runtime_data
+        self._entry = entry
+        self._client: AsyncOpenAI = entry.runtime_data
+        self._attr_unique_id = entry.entry_id
+
+        # Set supported features based on LLM API config
+        if CONF_LLM_HASS_API in entry.options:
+            self._attr_supported_features = conversation.ConversationEntityFeature.CONTROL
+
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="CodingPlan",
+            manufacturer="Alibaba Cloud",
+            model=entry.data.get(CONF_CHAT_MODEL, "CodingPlan"),
+            entry_type=dr.DeviceEntryType.SERVICE,
+        )
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
         """Return a list of supported languages."""
         return MATCH_ALL
 
-    @property
-    def id(self) -> str:
-        """Return the agent id."""
-        return self.entry.entry_id
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to Home Assistant."""
+        await super().async_added_to_hass()
+        conversation.async_set_agent(self.hass, self._entry, self)
+        _LOGGER.info("CodingPlan conversation entity added successfully")
+
+    async def async_will_remove_from_hass(self) -> None:
+        """When entity will be removed from Home Assistant."""
+        conversation.async_unset_agent(self.hass, self._entry)
+        await super().async_will_remove_from_hass()
 
     def _get_all_states_tool(self) -> dict[str, Any]:
         """Create a tool to get all entity states."""
@@ -78,13 +113,13 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
             "type": "function",
             "function": {
                 "name": "get_all_states",
-                "description": "Get the current state of all Home Assistant entities including sensors, switches, lights, climate, etc. Use this to answer questions about home status, temperature, air quality, device states, etc.",
+                "description": "Get the current state of all Home Assistant entities including sensors, switches, lights, climate, etc.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "entity_filter": {
                             "type": "string",
-                            "description": "Optional filter to get specific entity types (e.g., 'sensor', 'climate', 'light', 'switch', 'binary_sensor'). Use empty string for all entities.",
+                            "description": "Optional filter (e.g., 'sensor', 'climate', 'light')",
                         }
                     },
                     "required": ["entity_filter"],
@@ -98,13 +133,13 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
             "type": "function",
             "function": {
                 "name": "get_state",
-                "description": "Get the current state of a specific Home Assistant entity by entity_id",
+                "description": "Get the current state of a specific entity",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "entity_id": {
                             "type": "string",
-                            "description": "The entity_id to get state for (e.g., sensor.living_room_temperature, climate.bedroom_ac)",
+                            "description": "Entity ID (e.g., sensor.living_room_temperature)",
                         }
                     },
                     "required": ["entity_id"],
@@ -118,26 +153,14 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
             "type": "function",
             "function": {
                 "name": "call_service",
-                "description": "Call a Home Assistant service to control devices (turn on/off lights, set climate temperature, etc.)",
+                "description": "Call a Home Assistant service to control devices",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "domain": {
-                            "type": "string",
-                            "description": "Service domain (e.g., light, switch, climate, media_player)",
-                        },
-                        "service": {
-                            "type": "string",
-                            "description": "Service name (e.g., turn_on, turn_off, set_temperature, media_play)",
-                        },
-                        "entity_id": {
-                            "type": "string",
-                            "description": "Entity ID to control (optional for some services)",
-                        },
-                        "service_data": {
-                            "type": "object",
-                            "description": "Additional service data/parameters",
-                        },
+                        "domain": {"type": "string", "description": "Service domain"},
+                        "service": {"type": "string", "description": "Service name"},
+                        "entity_id": {"type": "string", "description": "Entity ID"},
+                        "service_data": {"type": "object", "description": "Service data"},
                     },
                     "required": ["domain", "service"],
                 },
@@ -156,7 +179,7 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
                         "state": state.state,
                         "attributes": dict(state.attributes),
                     })
-            return {"entities": states[:50]}  # Limit to 50 entities
+            return {"entities": states[:50]}
 
         elif tool_name == "get_state":
             entity_id = tool_args.get("entity_id")
@@ -174,17 +197,13 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
             service = tool_args.get("service")
             entity_id = tool_args.get("entity_id")
             service_data = tool_args.get("service_data", {})
-
             if entity_id:
                 service_data["entity_id"] = entity_id
-
             try:
-                await self.hass.services.async_call(
-                    domain, service, service_data, blocking=True
-                )
-                return {"success": True, "message": f"Called {domain}.{service}"}
+                await self.hass.services.async_call(domain, service, service_data, blocking=True)
+                return {"success": True}
             except Exception as err:
-                return {"success": False, "error": str(err)}
+                return {"error": str(err)}
 
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -192,18 +211,11 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
         self, user_input: conversation.ConversationInput
     ) -> conversation.ConversationResult:
         """Process a sentence."""
-        _LOGGER.debug("Processing user input: %s", user_input.text)
+        _LOGGER.debug("Processing: %s", user_input.text)
 
-        # Get conversation id or create new one
-        if user_input.conversation_id:
-            conversation_id = user_input.conversation_id
-        else:
-            conversation_id = ulid.ulid_now()
+        conversation_id = user_input.conversation_id or ulid.ulid_now()
+        enable_ha_control = CONF_LLM_HASS_API in self._entry.options
 
-        # Check if HA control is enabled
-        enable_ha_control = CONF_LLM_HASS_API in self.entry.options
-
-        # Get LLM API if configured (for additional tools)
         llm_api: llm.APIInstance | None = None
         if enable_ha_control:
             try:
@@ -216,150 +228,91 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
                 )
                 llm_api = await llm.async_get_api(
                     self.hass,
-                    self.entry.options[CONF_LLM_HASS_API],
+                    self._entry.options[CONF_LLM_HASS_API],
                     llm_context,
                 )
             except HomeAssistantError as err:
                 _LOGGER.error("Error getting LLM API: %s", err)
 
-        # Build messages
         messages: list[dict[str, Any]] = []
+        custom_prompt = self._entry.data.get(CONF_PROMPT, "")
 
-        # Get system prompt
-        custom_prompt = self.entry.data.get(CONF_PROMPT, "")
         if llm_api:
             system_prompt = llm_api.api_prompt
             if custom_prompt:
-                system_prompt = f"{system_prompt}\n\nAdditional instructions: {custom_prompt}"
-        elif custom_prompt:
-            system_prompt = custom_prompt
+                system_prompt += f"\n\nAdditional instructions: {custom_prompt}"
         else:
-            system_prompt = "You are a helpful assistant."
+            system_prompt = custom_prompt or "You are a helpful assistant."
 
-        # Add default system prompt for full access
         if enable_ha_control:
-            system_prompt += (
-                "\n\nYou have FULL ACCESS to all Home Assistant entities. "
-                "You can read states of any sensor, switch, light, climate device, etc. "
-                "You can also control devices by calling services. "
-                "Always use the available tools to get accurate information before answering."
-            )
+            system_prompt += "\n\nYou have FULL ACCESS to all Home Assistant entities. Use tools to get information."
 
         messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_input.text})
 
-        # Prepare tools - always include our custom tools for full access
         tools: list[dict[str, Any]] = []
         if enable_ha_control:
-            tools.append(self._get_all_states_tool())
-            tools.append(self._get_state_tool())
-            tools.append(self._call_service_tool())
-
-            # Also add LLM API tools if available
+            tools.extend([self._get_all_states_tool(), self._get_state_tool(), self._call_service_tool()])
             if llm_api:
                 for tool in llm_api.tools:
-                    tools.append({
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": tool.parameters,
-                        },
-                    })
+                    tools.append(_format_tool(tool))
 
-            _LOGGER.debug("Available tools: %s", [t["function"]["name"] for t in tools])
-
-        # Call API
         try:
-            response = await self.client.chat.completions.create(
-                model=self.entry.data[CONF_CHAT_MODEL],
+            response = await self._client.chat.completions.create(
+                model=self._entry.data[CONF_CHAT_MODEL],
                 messages=messages,
                 tools=tools if tools else None,
-                max_tokens=self.entry.data.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
-                temperature=self.entry.data.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
-                top_p=self.entry.data.get(CONF_TOP_P, DEFAULT_TOP_P),
-                user=conversation_id,
+                max_tokens=self._entry.data.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
+                temperature=self._entry.data.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
+                top_p=self._entry.data.get(CONF_TOP_P, DEFAULT_TOP_P),
             )
         except openai.AuthenticationError as err:
             raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
         except openai.OpenAIError as err:
-            raise HomeAssistantError(f"Error communicating with CodingPlan: {err}") from err
+            raise HomeAssistantError(f"Error: {err}") from err
 
-        choice: Choice = response.choices[0]
-        message: ChatCompletionMessage = choice.message
+        message = response.choices[0].message
+        iteration = 0
 
-        # Handle tool calls
-        max_iterations = MAX_TOOL_ITERATIONS
-        current_iteration = 0
-
-        while message.tool_calls and current_iteration < max_iterations:
-            current_iteration += 1
-
-            # Add assistant message with tool calls
+        while message.tool_calls and iteration < MAX_TOOL_ITERATIONS:
+            iteration += 1
             messages.append({
                 "role": "assistant",
                 "content": message.content,
                 "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": tc.type,
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
+                    {"id": tc.id, "type": tc.type, "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
                     for tc in message.tool_calls
                 ],
             })
 
-            # Process each tool call
-            for tool_call in message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
+            for tc in message.tool_calls:
+                args = json.loads(tc.function.arguments)
+                _LOGGER.debug("Tool: %s, args: %s", tc.function.name, args)
 
-                _LOGGER.debug("Calling tool: %s with args: %s", tool_name, tool_args)
-
-                # First try our custom tools
-                if tool_name in ["get_all_states", "get_state", "call_service"]:
-                    tool_result = await self._handle_tool_call(tool_name, tool_args)
+                if tc.function.name in ["get_all_states", "get_state", "call_service"]:
+                    result = await self._handle_tool_call(tc.function.name, args)
                 elif llm_api:
-                    # Try LLM API tool
                     try:
-                        tool_result = await llm_api.async_call_tool(tool_name, tool_args)
+                        result = await llm_api.async_call_tool(llm.ToolInput(tc.function.name, args))
                     except Exception as err:
-                        tool_result = {"error": str(err)}
-                        _LOGGER.error("Tool call failed: %s", err)
+                        result = {"error": str(err)}
                 else:
-                    tool_result = {"error": f"Unknown tool: {tool_name}"}
+                    result = {"error": "Unknown tool"}
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "name": tool_name,
-                    "content": json.dumps(tool_result),
-                })
+                messages.append({"role": "tool", "tool_call_id": tc.id, "name": tc.function.name, "content": json.dumps(result)})
 
-            # Get next response
             try:
-                response = await self.client.chat.completions.create(
-                    model=self.entry.data[CONF_CHAT_MODEL],
+                response = await self._client.chat.completions.create(
+                    model=self._entry.data[CONF_CHAT_MODEL],
                     messages=messages,
                     tools=tools if tools else None,
-                    max_tokens=self.entry.data.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
-                    temperature=self.entry.data.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
-                    top_p=self.entry.data.get(CONF_TOP_P, DEFAULT_TOP_P),
-                    user=conversation_id,
+                    max_tokens=self._entry.data.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
                 )
             except openai.OpenAIError as err:
-                raise HomeAssistantError(f"Error communicating with CodingPlan: {err}") from err
+                raise HomeAssistantError(f"Error: {err}") from err
 
             message = response.choices[0].message
 
-        # Build response
         intent_response = intent.IntentResponse(language=user_input.language)
         intent_response.async_set_speech(message.content or "")
-
-        return conversation.ConversationResult(
-            response=intent_response,
-            conversation_id=conversation_id,
-        )
+        return conversation.ConversationResult(response=intent_response, conversation_id=conversation_id)

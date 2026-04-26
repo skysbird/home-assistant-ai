@@ -8,6 +8,6 @@
   "documentation": "https://help.aliyun.com/document_detail/xxxxxx.html",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "requirements": ["openai>=1.0.0"],
-  "version": "1.1.0"
+  "requirements": ["openai>=1.0.0", "voluptuous-openapi>=0.1.0"],
+  "version": "1.3.0"
 }
