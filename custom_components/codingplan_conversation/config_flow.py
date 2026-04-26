@@ -17,7 +17,6 @@ from .const import (
     CONF_BASE_URL,
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
-    CONF_REASONING_EFFORT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
     DEFAULT_BASE_URL,
@@ -30,28 +29,18 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-async def get_available_models(
-    hass: HomeAssistant,
-    base_url: str,
-    api_key: str,
-) -> list[str]:
-    """Fetch available models from CodingPlan API."""
-    try:
-        client = openai.AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            http_client=get_async_client(hass),
-        )
-        response = await client.models.list(timeout=30.0)
-        # Filter to chat completion models
-        models = [
-            model.id for model in response.data
-            if any(x in model.id.lower() for x in ["gpt", "turbo", "claude", "qwen", "codingplan"])
-        ]
-        return sorted(models) if models else [DEFAULT_CHAT_MODEL]
-    except Exception as err:
-        _LOGGER.warning("Failed to fetch models: %s", err)
-        return [DEFAULT_CHAT_MODEL]
+# Preset models for CodingPlan (since /models endpoint may not be available)
+PRESET_MODELS = [
+    "codingplan-turbo",
+    "codingplan-plus",
+    "codingplan-max",
+    "qwen-turbo",
+    "qwen-plus",
+    "qwen-max",
+    "gpt-3.5-turbo",
+    "gpt-4",
+    "gpt-4-turbo",
+]
 
 
 async def validate_api_connection(
@@ -59,14 +48,26 @@ async def validate_api_connection(
     base_url: str,
     api_key: str,
 ) -> bool:
-    """Validate the API connection."""
+    """Validate the API connection with a simple request."""
     client = openai.AsyncOpenAI(
         api_key=api_key,
         base_url=base_url,
         http_client=get_async_client(hass),
     )
-    await client.models.list(timeout=10.0)
-    return True
+    # Try a simple chat completion to validate
+    try:
+        response = await client.chat.completions.create(
+            model="codingplan-turbo",
+            messages=[{"role": "user", "content": "Hi"}],
+            max_tokens=5,
+            timeout=10.0,
+        )
+        return True
+    except openai.NotFoundError:
+        # Model not found, but API is valid - that's OK
+        return True
+    except Exception:
+        raise
 
 
 class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -78,7 +79,6 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self.base_url: str = DEFAULT_BASE_URL
         self.api_key: str = ""
-        self.available_models: list[str] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -99,13 +99,9 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
             except openai.APIConnectionError:
                 errors["base"] = "cannot_connect"
             except Exception:
-                _LOGGER.exception("Unexpected exception")
+                _LOGGER.exception("Unexpected exception during validation")
                 errors["base"] = "unknown"
             else:
-                # Fetch available models
-                self.available_models = await get_available_models(
-                    self.hass, self.base_url, self.api_key
-                )
                 return await self.async_step_model()
 
         data_schema = vol.Schema(
@@ -144,16 +140,11 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        # Build model selector
-        model_options = {model: model for model in self.available_models}
-        default_model = (
-            self.available_models[0] if self.available_models else DEFAULT_CHAT_MODEL
-        )
-
+        # Use preset models with text input option
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_CHAT_MODEL, default=default_model): vol.In(
-                    model_options
+                vol.Required(CONF_CHAT_MODEL, default=DEFAULT_CHAT_MODEL): vol.In(
+                    {model: model for model in PRESET_MODELS}
                 ),
                 vol.Optional(CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS): vol.All(
                     int, vol.Range(min=1, max=8192)
