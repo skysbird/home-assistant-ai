@@ -207,17 +207,18 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
         llm_api: llm.APIInstance | None = None
         if enable_ha_control:
             try:
+                llm_context = llm.LLMContext(
+                    platform=DOMAIN,
+                    context=user_input.context,
+                    user_prompt=user_input.text,
+                    language=user_input.language,
+                    assistant="conversation",
+                    device_id=user_input.device_id,
+                )
                 llm_api = await llm.async_get_api(
                     self.hass,
                     self.entry.options[CONF_LLM_HASS_API],
-                    llm.LLMContext(
-                        platform=DOMAIN,
-                        context=user_input.context,
-                        user_prompt=user_input.text,
-                        language=user_input.language,
-                        assistant="conversation",
-                        device_id=user_input.device_id,
-                    ),
+                    llm_context,
                 )
             except HomeAssistantError as err:
                 _LOGGER.error("Error getting LLM API: %s", err)
