@@ -9,14 +9,21 @@ import openai
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_API_KEY
+from homeassistant.const import CONF_API_KEY, CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import llm
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .const import (
     CONF_BASE_URL,
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
+    CONF_PROMPT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
     DEFAULT_BASE_URL,
@@ -92,6 +99,7 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self.base_url: str = DEFAULT_BASE_URL
         self.api_key: str = ""
+        self.options: dict[str, Any] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -140,18 +148,12 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Save the configuration
-            return self.async_create_entry(
-                title="CodingPlan",
-                data={
-                    CONF_BASE_URL: self.base_url,
-                    CONF_API_KEY: self.api_key,
-                    CONF_CHAT_MODEL: user_input[CONF_CHAT_MODEL],
-                    CONF_MAX_TOKENS: user_input[CONF_MAX_TOKENS],
-                    CONF_TEMPERATURE: user_input[CONF_TEMPERATURE],
-                    CONF_TOP_P: user_input[CONF_TOP_P],
-                },
-            )
+            self.options[CONF_CHAT_MODEL] = user_input[CONF_CHAT_MODEL]
+            self.options[CONF_MAX_TOKENS] = user_input[CONF_MAX_TOKENS]
+            self.options[CONF_TEMPERATURE] = user_input[CONF_TEMPERATURE]
+            self.options[CONF_TOP_P] = user_input[CONF_TOP_P]
+            self.options[CONF_PROMPT] = user_input.get(CONF_PROMPT, "")
+            return await self.async_step_llm()
 
         # Use preset models with dropdown selector
         data_schema = vol.Schema(
@@ -168,6 +170,7 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_TOP_P, default=DEFAULT_TOP_P): vol.All(
                     vol.Coerce(float), vol.Range(min=0.0, max=1.0)
                 ),
+                vol.Optional(CONF_PROMPT, default=""): str,
             }
         )
 
@@ -175,6 +178,48 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="model",
             data_schema=data_schema,
             errors=errors,
+        )
+
+    async def async_step_llm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle LLM API selection step."""
+        if user_input is not None:
+            # Save the configuration
+            return self.async_create_entry(
+                title="CodingPlan",
+                data={
+                    CONF_BASE_URL: self.base_url,
+                    CONF_API_KEY: self.api_key,
+                    CONF_CHAT_MODEL: self.options[CONF_CHAT_MODEL],
+                    CONF_MAX_TOKENS: self.options[CONF_MAX_TOKENS],
+                    CONF_TEMPERATURE: self.options[CONF_TEMPERATURE],
+                    CONF_TOP_P: self.options[CONF_TOP_P],
+                    CONF_PROMPT: self.options.get(CONF_PROMPT, ""),
+                },
+                options={
+                    CONF_LLM_HASS_API: user_input.get(CONF_LLM_HASS_API, llm.LLM_API_ASSIST),
+                },
+            )
+
+        data_schema = vol.Schema(
+            {
+                vol.Optional(CONF_LLM_HASS_API, default=llm.LLM_API_ASSIST): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[llm.LLM_API_ASSIST],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key="llm_hass_api",
+                    )
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="llm",
+            data_schema=data_schema,
+            description_placeholders={
+                "docs_url": "https://www.home-assistant.io/integrations/conversation/#control-home-assistant",
+            },
         )
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:

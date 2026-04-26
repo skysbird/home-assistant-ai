@@ -23,6 +23,7 @@ from homeassistant.util import ulid
 from .const import (
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
+    CONF_PROMPT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
     DEFAULT_MAX_TOKENS,
@@ -105,9 +106,15 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
         # Build messages
         messages: list[dict[str, Any]] = []
 
-        # Add system prompt
+        # Get system prompt from LLM API or use custom prompt
+        custom_prompt = self.entry.data.get(CONF_PROMPT, "")
         if llm_api:
-            system_prompt = self.entry.options.get(CONF_LLM_HASS_API, llm.DEFAULT_INSTRUCTIONS_PROMPT)
+            # Use LLM API's system prompt + custom prompt
+            system_prompt = llm_api.api_prompt
+            if custom_prompt:
+                system_prompt = f"{system_prompt}\n\nAdditional instructions: {custom_prompt}"
+        elif custom_prompt:
+            system_prompt = custom_prompt
         else:
             system_prompt = "You are a helpful assistant."
 

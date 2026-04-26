@@ -20,13 +20,25 @@
           "chat_model": "Model",
           "max_tokens": "Max Tokens",
           "temperature": "Temperature",
-          "top_p": "Top P"
+          "top_p": "Top P",
+          "prompt": "Instructions (optional)"
         },
         "data_description": {
           "chat_model": "Select from CodingPlan supported models",
           "max_tokens": "Maximum number of tokens to generate (1-8192)",
           "temperature": "Sampling temperature (0.0-2.0)",
-          "top_p": "Nucleus sampling parameter (0.0-1.0)"
+          "top_p": "Nucleus sampling parameter (0.0-1.0)",
+          "prompt": "Custom instructions for how the AI should respond"
+        }
+      },
+      "llm": {
+        "title": "Home Assistant Control",
+        "description": "Configure if the AI should be able to control Home Assistant devices. You can control which devices and entities it can access from the exposed entities page.",
+        "data": {
+          "llm_hass_api": "Control Home Assistant"
+        },
+        "data_description": {
+          "llm_hass_api": "Allow the model to interact with Home Assistant"
         }
       }
     },
@@ -39,10 +51,10 @@
       "already_configured": "CodingPlan is already configured."
     }
   },
-  "entity": {
-    "conversation": {
-      "codingplan_conversation": {
-        "name": "CodingPlan"
+  "selector": {
+    "llm_hass_api": {
+      "options": {
+        "assist": "Control Home Assistant (Assist API)"
       }
     }
   }
