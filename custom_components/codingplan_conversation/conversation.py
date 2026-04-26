@@ -215,7 +215,7 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
                         context=user_input.context,
                         user_prompt=user_input.text,
                         language=user_input.language,
-                        assistant=conversation.CONVERSATION_ASSISTANT,
+                        assistant="conversation",
                         device_id=user_input.device_id,
                     ),
                 )
