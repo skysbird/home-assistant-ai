@@ -12,14 +12,17 @@ CONF_PROMPT = "prompt"
 CONF_REASONING_EFFORT = "reasoning_effort"
 CONF_WEB_SEARCH = "web_search"
 
-DEFAULT_BASE_URL = "https://codingplan.aliyuncs.com/v1"
+# CodingPlan official API endpoint
+# OpenAI compatible: https://coding.dashscope.aliyuncs.com/v1
+# Anthropic compatible: https://coding.dashscope.aliyuncs.com/apps/anthropic
+DEFAULT_BASE_URL = "https://coding.dashscope.aliyuncs.com/v1"
 DEFAULT_API_VERSION = "2024-05-01"
-DEFAULT_CHAT_MODEL = "codingplan-turbo"
+DEFAULT_CHAT_MODEL = "qwen3.6-plus"
 DEFAULT_MAX_TOKENS = 1024
 DEFAULT_TEMPERATURE = 1.0
 DEFAULT_TOP_P = 1.0
 
-RECOMMENDED_CHAT_MODEL = "codingplan-turbo"
+RECOMMENDED_CHAT_MODEL = "qwen3.6-plus"
 RECOMMENDED_MAX_TOKENS = 1024
 RECOMMENDED_TEMPERATURE = 1.0
 RECOMMENDED_TOP_P = 1.0

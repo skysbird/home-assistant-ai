@@ -29,17 +29,30 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Preset models for CodingPlan (since /models endpoint may not be available)
+# CodingPlan supported models (from official documentation)
 PRESET_MODELS = [
-    "codingplan-turbo",
-    "codingplan-plus",
-    "codingplan-max",
-    "qwen-turbo",
-    "qwen-plus",
-    "qwen-max",
-    "gpt-3.5-turbo",
-    "gpt-4",
-    "gpt-4-turbo",
+    # 推荐模型
+    "qwen3.6-plus",
+    "kimi-k2.5",
+    "glm-5",
+    "minimax-m2.5",
+    # 更多模型
+    "qwen3.5-plus",
+    "qwen3-max-2026-01-23",
+    "qwen3-coder-next",
+    "qwen3-coder-plus",
+    "glm-4.7",
+    # 其他兼容模型
+    "qwen3.6-max-preview",
+    "qwen3.6-flash",
+    "qwen3-vl-plus",
+    "qwen3-coder",
+    "qwen3-max",
+    "qwen3.5-omni-plus",
+    "wan2.6-t2v",
+    "wan2.7-image",
+    "wan2.7-video",
+    "wan2.6-i2v",
 ]
 
 
@@ -57,7 +70,7 @@ async def validate_api_connection(
     # Try a simple chat completion to validate
     try:
         response = await client.chat.completions.create(
-            model="codingplan-turbo",
+            model="qwen3.6-plus",
             messages=[{"role": "user", "content": "Hi"}],
             max_tokens=5,
             timeout=10.0,
@@ -116,7 +129,7 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=data_schema,
             errors=errors,
             description_placeholders={
-                "url": "https://codingplan.aliyuncs.com",
+                "url": "https://coding.dashscope.aliyuncs.com/v1",
             },
         )
 
@@ -140,7 +153,7 @@ class CodingPlanConfigFlow(ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        # Use preset models with text input option
+        # Use preset models with dropdown selector
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_CHAT_MODEL, default=DEFAULT_CHAT_MODEL): vol.In(
