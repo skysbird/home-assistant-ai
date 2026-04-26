@@ -6,9 +6,8 @@
 
 | 服务 | 功能 | 端口 | 模型 |
 |------|------|------|------|
-| **VoxCPM2** | TTS 语音合成 | 8000/10200 | 2B 参数，30 语言，48kHz |
-| **Whisper** | STT 语音识别 | 10300 | medium-int8 (中文) |
-| **OpenWakeWord** | 唤醒词 | 10400 | hey_mycropt |
+| **VoxCPM2** | TTS 语音合成 | 10200 | 2B 参数，30 语言，48kHz |
+| **FunASR** | STT 语音识别 | 10300 | SenseVoiceSmall (阿里达摩院) |
 
 ---
 
@@ -16,19 +15,7 @@
 
 M4 Mac Mini 性能很强，直接本地运行效果最好：
 
-### 1. 安装 Homebrew（如果没有）
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
-### 2. 安装 Python
-
-```bash
-brew install python@3.11
-```
-
-### 3. 运行安装脚本
+### 一键安装
 
 ```bash
 cd wyoming-voice
@@ -36,22 +23,33 @@ chmod +x install-mac.sh
 ./install-mac.sh
 ```
 
-### 4. 启动服务
+安装脚本会自动安装：
+- **VoxCPM2** - TTS 语音合成
+- **FunASR** - STT 语音识别 (阿里达摩院 SenseVoiceSmall)
+
+### 启动服务
 
 ```bash
 cd ~/voxcpm-tts
-./start.sh
+
+# 方式1: 全部启动
+./start_all.sh
+
+# 方式2: 单独启动
+./start.sh           # TTS (端口 10200)
+./start_funasr.sh    # STT (端口 10300)
 ```
 
-### 5. 添加到 Home Assistant
+### 添加到 Home Assistant
 
-在 Home Assistant 中：
+在 Home Assistant 中分别添加 Wyoming 集成：
 
-1. **设置** → **设备与服务** → **添加集成**
-2. 搜索 **Wyoming**
-3. 配置：
-   - 主机：Mac 的 IP 地址（如 `192.168.2.xxx`）
-   - 端口：`10200`
+| 服务 | 端口 | 功能 |
+|------|------|------|
+| TTS | 10200 | 语音合成 |
+| STT | 10300 | 语音识别 |
+
+配置地址：`ws://Mac的IP地址:端口`
 
 ---
 

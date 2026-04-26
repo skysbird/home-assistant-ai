@@ -46,6 +46,16 @@ pip install wyoming aiohttp soundfile numpy
 
 # 下载模型（可选，首次运行时会自动下载）
 echo ""
+echo "=== 安装 ASR (Faster Whisper) ==="
+echo "安装 Wyoming Faster Whisper..."
+pip install wyoming_faster_whisper
+
+echo ""
+echo "=== 唤醒词说明 ==="
+echo "注意: OpenWakeWord 需要 tflite-runtime，Python 3.13 不兼容"
+echo "唤醒词服务建议用 Docker 或降级到 Python 3.11"
+
+echo ""
 echo "=== 模型下载 ==="
 echo "首次运行时会自动下载模型 (~4GB)，或手动下载："
 echo "  pip install modelscope"
@@ -249,17 +259,84 @@ BASH_EOF
 
 chmod +x start.sh
 
+# 创建 Whisper ASR 启动脚本
+cat > start_whisper.sh << 'BASH_EOF'
+#!/bin/bash
+cd "$HOME/voxcpm-tts"
+source venv/bin/activate
+
+echo "=== 启动 Wyoming Faster Whisper ASR ==="
+echo "端口: 10300"
+echo "模型: medium-int8 (中文优化)"
+echo ""
+
+python -m wyoming_faster_whisper \
+    --model medium-int8 \
+    --language zh \
+    --uri "tcp://0.0.0.0:10300" \
+    --data-dir ./models \
+    --beam-size 5
+BASH_EOF
+
+chmod +x start_whisper.sh
+
+# 创建统一启动脚本 (TTS + ASR)
+cat > start_all.sh << 'BASH_EOF'
+#!/bin/bash
+cd "$HOME/voxcpm-tts"
+source venv/bin/activate
+
+echo "=== 启动 Wyoming 语音服务 ==="
+echo ""
+echo "服务列表:"
+echo "  - VoxCPM2 TTS: 端口 10200"
+echo "  - Faster Whisper ASR: 端口 10300"
+echo ""
+
+# 启动 TTS (后台)
+python wyoming_voxcpm_mac.py &
+TTS_PID=$!
+echo "TTS 启动 (PID: $TTS_PID)"
+
+# 启动 ASR (后台)
+python -m wyoming_faster_whisper --model medium-int8 --language zh --uri "tcp://0.0.0.0:10300" --data-dir ./models --beam-size 5 &
+ASR_PID=$!
+echo "ASR 启动 (PID: $ASR_PID)"
+
+echo ""
+echo "=== 服务已启动 ==="
+echo "Home Assistant 配置:"
+echo "  - Wyoming TTS: ws://本机IP:10200"
+echo "  - Wyoming STT: ws://本机IP:10300"
+echo ""
+echo "按 Ctrl+C 停止所有服务"
+
+# 等待任意进程结束
+wait
+
+# 清理
+kill $TTS_PID $ASR_PID 2>/dev/null
+BASH_EOF
+
+chmod +x start_all.sh
+
 echo ""
 echo "=== 安装完成 ==="
 echo ""
 echo "目录: $INSTALL_DIR"
 echo ""
-echo "启动服务:"
-echo "  cd ~/voxcpm-tts && ./start.sh"
+echo "启动方式:"
+echo "  单独启动 TTS:   cd ~/voxcpm-tts && ./start.sh"
+echo "  单独启动 ASR:   cd ~/voxcpm-tts && ./start_whisper.sh"
+echo "  全部启动:       cd ~/voxcpm-tts && ./start_all.sh"
 echo ""
 echo "Home Assistant 配置:"
 echo "  1. 设置 → 设备与服务 → 添加集成 → Wyoming"
-echo "  2. 地址: ws://YOUR_MAC_IP:10200"
+echo "  2. TTS 地址: ws://YOUR_MAC_IP:10200"
+echo "  3. STT 地址: ws://YOUR_MAC_IP:10300"
 echo ""
 echo "=== 注意 ==="
-echo "首次启动会下载模型 (~4GB)，请耐心等待"
+echo "首次启动会下载模型:"
+echo "  - VoxCPM2: ~4GB"
+echo "  - Faster Whisper medium-int8: ~1.5GB"
+echo "请耐心等待"
