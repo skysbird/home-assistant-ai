@@ -44,17 +44,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up CodingPlan conversation entity."""
+    _LOGGER.debug("Setting up CodingPlan conversation entity for entry %s", entry.entry_id)
     client: AsyncOpenAI = entry.runtime_data
 
-    await async_add_entities(
-        [
-            CodingPlanConversationEntity(
-                hass=hass,
-                entry=entry,
-                client=client,
-            )
-        ]
-    )
+    try:
+        entity = CodingPlanConversationEntity(
+            hass=hass,
+            entry=entry,
+            client=client,
+        )
+        _LOGGER.debug("Created CodingPlan entity: %s", entity.entity_id)
+        await async_add_entities([entity])
+        _LOGGER.info("CodingPlan conversation entity added successfully")
+    except Exception as err:
+        _LOGGER.exception("Failed to set up CodingPlan conversation entity: %s", err)
+        raise
 
 
 class CodingPlanConversationEntity(conversation.ConversationEntity):

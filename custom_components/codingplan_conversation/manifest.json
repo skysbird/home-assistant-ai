@@ -3,10 +3,11 @@
   "name": "CodingPlan Conversation",
   "codeowners": ["@custom"],
   "config_flow": true,
-  "dependencies": ["conversation"],
+  "dependencies": [],
+  "after_dependencies": ["conversation"],
   "documentation": "https://help.aliyun.com/document_detail/xxxxxx.html",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": ["openai>=1.0.0"],
-  "version": "1.0.1"
+  "version": "1.0.4"
 }
