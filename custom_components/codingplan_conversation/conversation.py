@@ -257,7 +257,7 @@ class CodingPlanAgent(conversation.AbstractConversationAgent):
 
             # Also add LLM API tools if available
             if llm_api:
-                for tool in llm_api.async_get_tools():
+                for tool in llm_api.tools:
                     tools.append({
                         "type": "function",
                         "function": {
